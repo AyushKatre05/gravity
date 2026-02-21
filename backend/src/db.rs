@@ -151,3 +151,90 @@ pub async fn save_analysis(
     tx.commit().await?;
     Ok(())
 }
+
+pub async fn fetch_summary(pool: &PgPool, project_id: Uuid) -> Result<AnalysisSummary> {
+    struct Row {
+        name: String,
+        path: String,
+    }
+
+    let project = sqlx::query_as!(
+        Row,
+        "SELECT name, path FROM projects WHERE id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await
+    .context("Project not found")?;
+
+    let total_files: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM files WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+
+    let total_functions: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM functions WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+
+    let total_imports: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM dependencies WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+
+    let avg_complexity: f64 = sqlx::query_scalar!(
+        "SELECT AVG(score::FLOAT8) FROM complexities WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(1.0);
+    let dead_code_candidates: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT f.name
+           FROM functions f
+           WHERE f.project_id = $1
+             AND f.name NOT IN (
+               SELECT DISTINCT target FROM dependencies WHERE project_id = $1
+             )
+             AND f.is_public = FALSE
+           ORDER BY f.name
+           LIMIT 20"#,
+        project_id
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut notes = Vec::new();
+    if total_files > 20 {
+        notes.push("Large project: consider splitting into smaller crates.".into());
+    }
+    if avg_complexity > 10.0 {
+        notes.push("High average cyclomatic complexity: refactoring recommended.".into());
+    }
+    if total_imports > total_files * 10 {
+        notes.push("High import density: possible tight coupling detected.".into());
+    }
+    if notes.is_empty() {
+        notes.push("Project structure looks healthy.".into());
+    }
+
+    Ok(AnalysisSummary {
+        project_id,
+        project_name: project.name,
+        total_files,
+        total_functions,
+        total_structs: 0, 
+        total_imports,
+        avg_complexity,
+        dead_code_candidates,
+        architecture_notes: notes,
+    })
+}
