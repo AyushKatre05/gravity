@@ -151,3 +151,200 @@ pub async fn save_analysis(
     tx.commit().await?;
     Ok(())
 }
+
+pub async fn fetch_summary(pool: &PgPool, project_id: Uuid) -> Result<AnalysisSummary> {
+    struct Row {
+        name: String,
+        path: String,
+    }
+
+    let project = sqlx::query_as!(
+        Row,
+        "SELECT name, path FROM projects WHERE id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await
+    .context("Project not found")?;
+
+    let total_files: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM files WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+
+    let total_functions: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM functions WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+
+    let total_imports: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM dependencies WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+
+    let avg_complexity: f64 = sqlx::query_scalar!(
+        "SELECT AVG(score::FLOAT8) FROM complexities WHERE project_id = $1",
+        project_id
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(1.0);
+    let dead_code_candidates: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT f.name
+           FROM functions f
+           WHERE f.project_id = $1
+             AND f.name NOT IN (
+               SELECT DISTINCT target FROM dependencies WHERE project_id = $1
+             )
+             AND f.is_public = FALSE
+           ORDER BY f.name
+           LIMIT 20"#,
+        project_id
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut notes = Vec::new();
+    if total_files > 20 {
+        notes.push("Large project: consider splitting into smaller crates.".into());
+    }
+    if avg_complexity > 10.0 {
+        notes.push("High average cyclomatic complexity: refactoring recommended.".into());
+    }
+    if total_imports > total_files * 10 {
+        notes.push("High import density: possible tight coupling detected.".into());
+    }
+    if notes.is_empty() {
+        notes.push("Project structure looks healthy.".into());
+    }
+
+    Ok(AnalysisSummary {
+        project_id,
+        project_name: project.name,
+        total_files,
+        total_functions,
+        total_structs: 0, 
+        total_imports,
+        avg_complexity,
+        dead_code_candidates,
+        architecture_notes: notes,
+    })
+}
+
+pub async fn fetch_files(pool: &PgPool, project_id: Uuid) -> Result<Vec<FileEntry>> {
+    let files = sqlx::query_as!(
+        FileEntry,
+        r#"SELECT id, project_id, path, module_name, line_count, created_at
+           FROM files WHERE project_id = $1 ORDER BY path"#,
+        project_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(files)
+}
+
+pub async fn fetch_graph(pool: &PgPool, project_id: Uuid) -> Result<GraphData> {
+    struct DepRow {
+        source: String,
+        target: String,
+    }
+
+    let deps = sqlx::query_as!(
+        DepRow,
+        "SELECT source, target FROM dependencies WHERE project_id = $1",
+        project_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let files = sqlx::query_scalar!(
+        "SELECT path FROM files WHERE project_id = $1",
+        project_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut nodes: Vec<GraphNode> = files
+        .into_iter()
+        .map(|path| {
+            let label = path
+                .rsplit('/')
+                .next()
+                .unwrap_or(&path)
+                .to_string();
+            GraphNode {
+                id: path.clone(),
+                label,
+                kind: "file".into(),
+            }
+        })
+        .collect();
+
+    let mut edges: Vec<GraphEdge> = Vec::new();
+
+    for dep in &deps {
+        if !nodes.iter().any(|n| n.id == dep.target) {
+            let label = dep.target.split("::").last().unwrap_or(&dep.target).to_string();
+            nodes.push(GraphNode {
+                id: dep.target.clone(),
+                label,
+                kind: "extern".into(),
+            });
+        }
+        edges.push(GraphEdge {
+            from: dep.source.clone(),
+            to: dep.target.clone(),
+            label: Some("uses".into()),
+        });
+    }
+
+    Ok(GraphData { nodes, edges })
+}
+
+pub async fn fetch_complexities(pool: &PgPool, project_id: Uuid) -> Result<Vec<ComplexityItem>> {
+    struct Row {
+        function_name: String,
+        file_path: String,
+        score: i32,
+        line_start: i32,
+        line_end: i32,
+    }
+
+    let rows = sqlx::query_as!(
+        Row,
+        r#"SELECT
+               fn.name      AS function_name,
+               fi.path      AS file_path,
+               cx.score,
+               fn.line_start,
+               fn.line_end
+           FROM complexities cx
+           JOIN functions fn ON cx.function_id = fn.id
+           JOIN files     fi ON fn.file_id      = fi.id
+           WHERE cx.project_id = $1
+           ORDER BY cx.score DESC"#,
+        project_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| ComplexityItem {
+            function_name: r.function_name,
+            file_path: r.file_path,
+            score: r.score,
+            line_start: r.line_start,
+            line_end: r.line_end,
+        })
+        .collect())
+}
