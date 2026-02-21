@@ -309,3 +309,42 @@ pub async fn fetch_graph(pool: &PgPool, project_id: Uuid) -> Result<GraphData> {
 
     Ok(GraphData { nodes, edges })
 }
+
+pub async fn fetch_complexities(pool: &PgPool, project_id: Uuid) -> Result<Vec<ComplexityItem>> {
+    struct Row {
+        function_name: String,
+        file_path: String,
+        score: i32,
+        line_start: i32,
+        line_end: i32,
+    }
+
+    let rows = sqlx::query_as!(
+        Row,
+        r#"SELECT
+               fn.name      AS function_name,
+               fi.path      AS file_path,
+               cx.score,
+               fn.line_start,
+               fn.line_end
+           FROM complexities cx
+           JOIN functions fn ON cx.function_id = fn.id
+           JOIN files     fi ON fn.file_id      = fi.id
+           WHERE cx.project_id = $1
+           ORDER BY cx.score DESC"#,
+        project_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| ComplexityItem {
+            function_name: r.function_name,
+            file_path: r.file_path,
+            score: r.score,
+            line_start: r.line_start,
+            line_end: r.line_end,
+        })
+        .collect())
+}
