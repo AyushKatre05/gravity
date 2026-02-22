@@ -35,3 +35,14 @@ pub struct FunctionEntry {
     pub is_async: bool,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Dependency {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub file_id: Uuid,
+    pub source: String,
+    pub target: String,
+    pub kind: String,
+    pub created_at: DateTime<Utc>,
+}
