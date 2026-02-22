@@ -130,3 +130,16 @@ pub struct AnalyzeRequest {
     pub path: Option<String>,
     pub github_url: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalyzeResponse {
+    pub project_id: Uuid,
+    pub files_analyzed: usize,
+    pub functions_found: usize,
+    pub message: String,
+
+    #[serde(skip)]
+    pub parsed_files_internal: Option<Vec<ParsedFile>>,
+    #[serde(skip)]
+    pub complexity_scores_internal: Option<Vec<(String, String, usize)>>,
+}
