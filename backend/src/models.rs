@@ -107,3 +107,9 @@ pub struct GraphEdge {
     pub to: String,
     pub label: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphData {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+}
