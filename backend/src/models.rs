@@ -113,3 +113,12 @@ pub struct GraphData {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComplexityItem {
+    pub function_name: String,
+    pub file_path: String,
+    pub score: i32,
+    pub line_start: i32,
+    pub line_end: i32,
+}
