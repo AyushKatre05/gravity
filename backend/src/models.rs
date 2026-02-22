@@ -22,3 +22,16 @@ pub struct FileEntry {
     pub line_count: i32,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FunctionEntry {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub file_id: Uuid,
+    pub name: String,
+    pub line_start: i32,
+    pub line_end: i32,
+    pub is_public: bool,
+    pub is_async: bool,
+    pub created_at: DateTime<Utc>,
+}
