@@ -79,3 +79,19 @@ impl DependencyGraph {
         GraphData { nodes, edges }
     }
 }
+
+
+fn normalise_import(raw: &str) -> String {
+    let trimmed = raw
+        .trim()
+        .trim_start_matches("use ")
+        .trim_end_matches(';')
+        .trim();
+
+    let top = trimmed.split("::").next().unwrap_or(trimmed);
+
+    match top {
+        "std" | "core" | "alloc" => trimmed.to_owned(),
+        _ => trimmed.to_owned(),
+    }
+}
