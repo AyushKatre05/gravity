@@ -1,0 +1,10 @@
+**/target
+**/dist
+**/.trunk
+**/.git
+workspace.code-workspace
+build_logs.txt
+check_out.txt
+check_err.txt
+check_full.txt
+last_err.txt

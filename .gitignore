@@ -1,0 +1,9 @@
+# Gravity — Code Intelligence Dashboard
+
+target/
+.env
+*.lock
+**/.DS_Store
+dist/
+node_modules/
+.sqlx/*.json
