@@ -141,3 +141,55 @@ async fn analyze_handler(
     }
     Ok(Json(res))
 }
+
+async fn summary_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ProjectQuery>,
+) -> Result<Json<AnalysisSummary>, (StatusCode, String)> {
+    let project_id = resolve_project_id(&state.pool, params.project_id).await?;
+
+    let summary = db::fetch_summary(&state.pool, project_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(summary))
+}
+async fn files_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ProjectQuery>,
+) -> Result<Json<Vec<FileEntry>>, (StatusCode, String)> {
+    let project_id = resolve_project_id(&state.pool, params.project_id).await?;
+
+    let files = db::fetch_files(&state.pool, project_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(files))
+}
+async fn graph_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ProjectQuery>,
+) -> Result<Json<GraphData>, (StatusCode, String)> {
+    let project_id = resolve_project_id(&state.pool, params.project_id).await?;
+
+    let graph = db::fetch_graph(&state.pool, project_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(graph))
+}
+async fn complexity_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ProjectQuery>,
+) -> Result<Json<Vec<ComplexityItem>>, (StatusCode, String)> {
+    let project_id = resolve_project_id(&state.pool, params.project_id).await?;
+
+    let items = db::fetch_complexities(&state.pool, project_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(items))
+}
+async fn health_handler() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "status": "ok" }))
+}
