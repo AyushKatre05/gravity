@@ -1,0 +1,5 @@
+# Enable sqlx offline mode so the build doesn't need a live DB.
+# Run `cargo sqlx prepare` connected to your Neon DB to regenerate this folder.
+# Then commit the .sqlx/ directory so Docker builds stay DB-independent.
+[sqlx]
+offline = true

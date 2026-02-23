@@ -2,24 +2,19 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use walkdir::WalkDir;
 use tree_sitter::{Language, Node, Parser};
-
 use crate::models::{ParsedFile, ParsedFunction};
 
 extern "C" {
     fn tree_sitter_rust() -> Language;
 }
-
-/// Walk `root_path` and parse every `.rs` file found.
 pub fn parse_directory(root_path: &str) -> Result<Vec<ParsedFile>> {
     let mut parser = Parser::new();
-    // SAFETY: tree_sitter_rust() is a well-known, correct FFI fn from tree-sitter-rust crate.
     let lang = unsafe { tree_sitter_rust() };
     parser
         .set_language(lang)
         .context("Failed to set tree-sitter Rust language")?;
 
     let mut results = Vec::new();
-
     for entry in WalkDir::new(root_path)
         .follow_links(false)
         .into_iter()
@@ -38,8 +33,6 @@ pub fn parse_directory(root_path: &str) -> Result<Vec<ParsedFile>> {
 
     Ok(results)
 }
-
-/// Parse a single Rust source file.
 fn parse_file(parser: &mut Parser, path: &Path) -> Result<ParsedFile> {
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("Cannot read {}", path.display()))?;
@@ -77,7 +70,7 @@ fn parse_file(parser: &mut Parser, path: &Path) -> Result<ParsedFile> {
     })
 }
 
-/// Recursively visit tree-sitter nodes and extract relevant items.
+/// 
 fn visit_node(
     node: &Node,
     source: &str,
