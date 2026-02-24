@@ -408,3 +408,83 @@ fn GraphPanel(project_id: ReadSignal<Option<String>>) -> impl IntoView {
         </Suspense>
     }
 }
+
+#[component]
+fn ComplexityPanel(project_id: ReadSignal<Option<String>>) -> impl IntoView {
+    let items = create_resource(project_id, |pid| async move {
+        let url = match &pid {
+            Some(id) => format!("/api/complexity?project_id={id}"),
+            None => "/api/complexity".into(),
+        };
+        Request::get(&url).send().await.ok()?
+            .json::<Vec<ComplexityItem>>().await.ok()
+    });
+
+    view! {
+        <Suspense fallback=move || view! { <LoadingCard /> }>
+            {move || items.get().flatten().map(|cx| {
+                if cx.is_empty() {
+                    return view! { <EmptyState icon="🌡" title="No complexity data" hint="Run analysis first." /> }.into_view();
+                }
+                view! {
+                    <div class="rounded-xl overflow-hidden" style="border: 1px solid var(--border);">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr style="background: var(--bg-secondary);">
+                                    <th class="text-left px-4 py-3 font-semibold" style="color: var(--text-muted);">"Function"</th>
+                                    <th class="text-left px-4 py-3 font-semibold" style="color: var(--text-muted);">"File"</th>
+                                    <th class="text-center px-4 py-3 font-semibold" style="color: var(--text-muted);">"Lines"</th>
+                                    <th class="text-center px-4 py-3 font-semibold" style="color: var(--text-muted);">"Score"</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {cx.iter().enumerate().map(|(i, item)| {
+                                    let bg = if i % 2 == 0 { "var(--bg-card)" } else { "var(--bg-secondary)" };
+                                    let score_color = if item.score >= 10 {
+                                        "var(--danger)"
+                                    } else if item.score >= 5 {
+                                        "var(--warning)"
+                                    } else {
+                                        "var(--success)"
+                                    };
+                                    let score_badge_bg = if item.score >= 10 {
+                                        "rgba(248,81,73,0.15)"
+                                    } else if item.score >= 5 {
+                                        "rgba(210,153,34,0.15)"
+                                    } else {
+                                        "rgba(63,185,80,0.15)"
+                                    };
+                                    let row_style = format!("background: {};", bg);
+                                    let score_style = format!("background: {}; color: {};", score_badge_bg, score_color);
+                                    let line_range = format!("{}-{}", item.line_start, item.line_end);
+
+                                    view! {
+                                        <tr style=row_style>
+                                            <td class="px-4 py-2 mono font-medium"
+                                                style="color: var(--accent-light); font-size: 0.8rem;">
+                                                {item.function_name.clone()}
+                                            </td>
+                                            <td class="px-4 py-2 mono"
+                                                style="color: var(--text-muted); font-size: 0.75rem;">
+                                                {item.file_path.rsplit('/').next().unwrap_or("").to_string()}
+                                            </td>
+                                            <td class="px-4 py-2 text-center mono" style="color: var(--text-muted);">
+                                                {line_range}
+                                            </td>
+                                            <td class="px-4 py-2 text-center">
+                                                <span class="px-2 py-1 rounded-md text-xs font-bold mono"
+                                                      style=score_style>
+                                                    {item.score}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                }).collect_view()}
+                            </tbody>
+                        </table>
+                    </div>
+                }.into_view()
+            })}
+        </Suspense>
+    }
+}
